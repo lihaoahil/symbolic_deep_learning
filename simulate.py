@@ -24,6 +24,14 @@ def make_transparent_color(ntimes, fraction):
   rgba[:, 3] = alpha[:, 0]
   return rgba
 
+def get_coupling(sim, sim_obj):
+
+    @jit
+    def coupling(x1, x2):
+      return x1[-3]*x2[-3] #combine for edge-dependent coupling constant
+    
+    return coupling
+
 def get_potential(sim, sim_obj):
 
     dim = sim_obj._dim
@@ -124,13 +132,14 @@ class SimulationDataset(object):
         self.nt = nt
         self.data = None
         self.times = np.linspace(0, self.dt*self.nt, num=self.nt)
-        self.G = 1
+        self.G = get_coupling(sim=sim, sim_obj=self)
         self.extra_potential = extra_potential
         self.pairwise = get_potential(sim=sim, sim_obj=self)
 
     def simulate(self, ns, key=0):
         rng = random.PRNGKey(key)
         vp = jit(vmap(self.pairwise, (None, 0), 0))
+        vg = jit(vmap(self.G, (None, 0), 0))
         n = self._n
         dim = self._dim 
 
@@ -138,7 +147,7 @@ class SimulationDataset(object):
         # params = 1
         # if sim in ['charge']:
         #     params = 2
-        params = 2
+        params = 3
         total_dim = dim*2+params
         times = self.times
         G = self.G
@@ -153,7 +162,9 @@ class SimulationDataset(object):
                 #Only with adjacent nodes
                 sum_potential = sum_potential + G*vp(xt[i], xt[[i+1]]).sum()
             else:
-                sum_potential = sum_potential + G*vp(xt[i], xt[i+1:]).sum()
+                #sum_potential = sum_potential + G*vp(xt[i], xt[i+1:]).sum()
+                #ipdb.set_trace()
+                sum_potential = sum_potential + (vg(xt[i], xt[i+1:])*vp(xt[i], xt[i+1:])).sum()
           if self.extra_potential is not None:
             sum_potential = sum_potential + vex(xt).sum()
           return sum_potential
@@ -188,9 +199,11 @@ class SimulationDataset(object):
                 x0 = index_update(x0, s_[..., 2:3], 0.0)
             else:
                 x0 = random.normal(key, (n, total_dim))
+                #ipdb.set_trace()
                 x0 = index_update(x0, s_[..., -1], np.exp(x0[..., -1])); #all masses set to positive
                 if sim in ['charge', 'superposition']:
                     x0 = index_update(x0, s_[..., -2], np.sign(x0[..., -2])); #charge is 1 or -1
+                x0 = index_update(x0, s_[..., -3], 1.0+0.1*np.sign(x0[..., -3])); #all coupling to 0.9 or 1.1 --> G=0.81 or 0.99 or 1.21 
 
             x_times = odeint(
                 odefunc,
@@ -210,11 +223,10 @@ class SimulationDataset(object):
 
     def get_acceleration(self):
         vp = jit(vmap(self.pairwise, (None, 0), 0))
+        vg = jit(vmap(self.G, (None, 0), 0))
         n = self._n
         dim = self._dim 
         sim = self._sim
-        params = 2
-        total_dim = dim*2+params
         times = self.times
         G = self.G
         if self.extra_potential is not None:
@@ -227,7 +239,8 @@ class SimulationDataset(object):
                 #Only with adjacent nodes
                 sum_potential = sum_potential + G*vp(xt[i], xt[[i+1]]).sum()
             else:
-                sum_potential = sum_potential + G*vp(xt[i], xt[i+1:]).sum()
+                #sum_potential = sum_potential + G*vp(xt[i], xt[i+1:]).sum()
+                sum_potential = sum_potential + (vg(xt[i], xt[i+1:])*vp(xt[i], xt[i+1:])).sum()
           if self.extra_potential is not None:
             sum_potential = sum_potential + vex(xt).sum()
           return sum_potential
@@ -288,5 +301,3 @@ class SimulationDataset(object):
                 camera.snap()
             from IPython.display import HTML
             return HTML(camera.animate().to_jshtml())
-
-
