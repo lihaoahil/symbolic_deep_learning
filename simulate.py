@@ -203,7 +203,7 @@ class SimulationDataset(object):
                 x0 = index_update(x0, s_[..., -1], np.exp(x0[..., -1])); #all masses set to positive
                 if sim in ['charge', 'superposition']:
                     x0 = index_update(x0, s_[..., -2], np.sign(x0[..., -2])); #charge is 1 or -1
-                x0 = index_update(x0, s_[..., -3], 1.0+0.1*np.sign(x0[..., -3])); #all coupling to 0.9 or 1.1 --> G=0.81 or 0.99 or 1.21 
+                x0 = index_update(x0, s_[..., -3], np.sign(x0[..., -3])); #all coupling to -1 or 1 
 
             x_times = odeint(
                 odefunc,
