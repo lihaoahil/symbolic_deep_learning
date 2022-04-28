@@ -1,6 +1,5 @@
 import jax
 from jax import ops
-from jax.ops import index_update
 from jax import numpy as np
 from matplotlib import pyplot as plt
 from jax import jit, vmap, grad, pmap
@@ -163,7 +162,6 @@ class SimulationDataset(object):
                 sum_potential = sum_potential + G*vp(xt[i], xt[[i+1]]).sum()
             else:
                 #sum_potential = sum_potential + G*vp(xt[i], xt[i+1:]).sum()
-                #ipdb.set_trace()
                 sum_potential = sum_potential + (vg(xt[i], xt[i+1:])*vp(xt[i], xt[i+1:])).sum()
           if self.extra_potential is not None:
             sum_potential = sum_potential + vex(xt).sum()
@@ -194,17 +192,15 @@ class SimulationDataset(object):
         def make_sim(key):
             if sim in ['string', 'string_ball']:
                 x0 = random.normal(key, (n, total_dim))
-                x0 = index_update(x0, s_[..., -1], 1); #const mass
-                x0 = index_update(x0, s_[..., 0], np.arange(n)+x0[...,0]*0.5)
-                x0 = index_update(x0, s_[..., 2:3], 0.0)
+                x0 = x0.at[..., -1].set(1) #const mass
+                x0 = x0.at[..., 0].set(np.arange(n)+x0.at[...,0]*0.5)
+                x0 = x0.at[..., 2:3].set(0.0)
             else:
                 x0 = random.normal(key, (n, total_dim))
-                #ipdb.set_trace()
-                x0 = index_update(x0, s_[..., -1], np.exp(x0[..., -1])); #all masses set to positive
+                x0 = x0.at[..., -1].set(np.exp(x0[..., -1])); #all masses set to positive
                 if sim in ['charge', 'superposition']:
-                    x0 = index_update(x0, s_[..., -2], np.sign(x0[..., -2])); #charge is 1 or -1
-                x0 = index_update(x0, s_[..., -3], np.sign(x0[..., -3])); #all coupling to -1 or 1 
-
+                    x0 = x0.at[..., -2].set(np.sign(x0[..., -2])); #charge is 1 or -1
+                x0 = x0.at[..., -3].set(np.sign(x0[..., -3])); #all coupling to -1 or 1 
             x_times = odeint(
                 odefunc,
                 x0.reshape(packed_shape),
@@ -227,6 +223,8 @@ class SimulationDataset(object):
         n = self._n
         dim = self._dim 
         sim = self._sim
+        params = 2
+        total_dim = dim*2+params
         times = self.times
         G = self.G
         if self.extra_potential is not None:
@@ -301,3 +299,4 @@ class SimulationDataset(object):
                 camera.snap()
             from IPython.display import HTML
             return HTML(camera.animate().to_jshtml())
+
